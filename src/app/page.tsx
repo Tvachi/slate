@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Activity, Clock, CheckCircle, Info, Loader2, Stethoscope } from "lucide-react";
 import type { TriageResult } from "./api/triage/route";
 
+type TriageResponse = TriageResult & {
+  _debug?: { requestId: string; durationMs: number; inputTokens: number; outputTokens: number };
+};
+
 const SAMPLE_CASES = [
   {
     label: "Chest Pain",
@@ -89,7 +93,7 @@ const TRIAGE_CONFIG: Record<
 
 export default function TriagePage() {
   const [symptoms, setSymptoms] = useState("");
-  const [result, setResult] = useState<TriageResult | null>(null);
+  const [result, setResult] = useState<TriageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -354,6 +358,37 @@ export default function TriagePage() {
             <p className="text-xs text-slate-600 text-center py-2">
               AI-generated triage assessment • Always defer to qualified medical professionals • Not for clinical use
             </p>
+
+            {/* Debug Panel */}
+            {result._debug && (
+              <details className="rounded-xl border border-slate-700 bg-slate-900/50 overflow-hidden">
+                <summary className="px-4 py-3 text-xs font-mono text-slate-500 cursor-pointer hover:text-slate-400 select-none flex items-center gap-2">
+                  <span className="text-green-500">●</span>
+                  Debug Info — Request {result._debug.requestId} · {result._debug.durationMs}ms · {result._debug.inputTokens + result._debug.outputTokens} tokens
+                </summary>
+                <div className="border-t border-slate-700 p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    {[
+                      { label: "Request ID", value: result._debug.requestId },
+                      { label: "Duration", value: `${result._debug.durationMs}ms` },
+                      { label: "Input Tokens", value: result._debug.inputTokens.toLocaleString() },
+                      { label: "Output Tokens", value: result._debug.outputTokens.toLocaleString() },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-slate-800 rounded-lg p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</div>
+                        <div className="text-sm font-mono text-slate-200">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Full API Response (JSON)</div>
+                    <pre className="text-xs font-mono text-green-400 bg-slate-950 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
+                      {JSON.stringify(result, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </details>
+            )}
           </div>
         )}
       </main>

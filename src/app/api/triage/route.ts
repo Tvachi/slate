@@ -33,8 +33,13 @@ Response format:
 }`;
 
 export async function POST(req: NextRequest) {
+  const requestId = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const startTime = Date.now();
+
   try {
     const { symptoms } = await req.json();
+
+    console.log(`[${requestId}] POST /api/triage — symptoms: ${symptoms?.length ?? 0} chars`);
 
     if (!symptoms || typeof symptoms !== "string" || symptoms.trim() === "") {
       return NextResponse.json(
@@ -42,6 +47,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log(`[${requestId}] Sending to Claude (model: claude-opus-4-6)...`);
 
     const stream = await client.messages.stream({
       model: "claude-opus-4-6",
@@ -59,6 +66,9 @@ export async function POST(req: NextRequest) {
     const rawText =
       message.content[0].type === "text" ? message.content[0].text : "";
 
+    console.log(`[${requestId}] Claude raw response (${rawText.length} chars):\n${rawText}`);
+    console.log(`[${requestId}] Usage — input: ${message.usage.input_tokens} tokens, output: ${message.usage.output_tokens} tokens`);
+
     const result: TriageResult = JSON.parse(rawText);
 
     // Validate triage level is in range
@@ -66,9 +76,11 @@ export async function POST(req: NextRequest) {
       throw new Error("Invalid triage level returned");
     }
 
-    return NextResponse.json(result);
+    console.log(`[${requestId}] Triage complete — Level ${result.triageLevel}, dept: ${result.recommendedDepartment} (${Date.now() - startTime}ms)`);
+
+    return NextResponse.json({ ...result, _debug: { requestId, durationMs: Date.now() - startTime, inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens } });
   } catch (error) {
-    console.error("Triage API error:", error);
+    console.error(`[${requestId}] Triage API error (${Date.now() - startTime}ms):`, error);
     if (error instanceof Anthropic.AuthenticationError) {
       return NextResponse.json(
         { error: "Invalid API key. Please check ANTHROPIC_API_KEY." },
@@ -83,12 +95,13 @@ export async function POST(req: NextRequest) {
     }
     if (error instanceof SyntaxError) {
       return NextResponse.json(
-        { error: "Failed to parse triage response. Please try again." },
+        { error: "Failed to parse triage response. Please try again.", _debug: { requestId, errorDetail: String(error) } },
         { status: 500 }
       );
     }
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "An unexpected error occurred. Please try again." },
+      { error: "An unexpected error occurred. Please try again.", _debug: { requestId, errorDetail: errorMessage, errorType: error?.constructor?.name } },
       { status: 500 }
     );
   }
